@@ -1,0 +1,368 @@
+---
+title: "Simulations Conv1D"
+author: "Alejandro Macías"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+libraries = c("gtools","keras","ggplot2", "calculus", "cowplot", "tidyverse")
+for (i in libraries) {
+  if(!require(i,character.only = TRUE)) {
+    install.packages(i)
+    library(i,character.only = TRUE)
+  }
+}
+```
+
+
+
+```{r}
+for (f in list.files("./functions/", pattern = "*.R")){
+  source(paste0("functions/", f))
+}
+```
+
+```{r}
+sample_size = 200
+signal_size = 10
+range = 5
+```
+
+# Simulations
+
+## 1D Convolution
+
+```{r}
+# for reproducibility purposes
+set.seed(1234)
+```
+
+
+```{r}
+# Fix data parameters
+sample_size = 200
+signal_size = 10
+range = 5
+# Fix CNN and PR parameters
+k = 3
+q = 3
+activation = 'tanh'
+```
+
+```{r}
+data = generate_data("1D", sample_size, signal_size, k, c(-range,range))
+split = scale_and_split("1D", data, split_prop=0.8)
+```
+
+```{r}
+input_shape = c(signal_size, 1)
+
+cnn_model <- keras_model_sequential() %>%
+  layer_conv_1d(filters=1, kernel_size=k, activation=activation, input_shape=input_shape) %>%
+  layer_flatten() %>%
+  layer_dense(units=1, activation = "linear")
+
+cnn_model %>% compile(
+  loss="mean_squared_error",
+  optimizer=optimizer_adam()
+)
+```
+
+```{r}
+cnn_history = cnn_model %>% fit(
+  split$train$X, split$train$Y,
+  view_metrics=F, verbose=0,
+  epochs=800
+)
+```
+
+```{r}
+out = pr_from_cnn_1d(split$train, split$test, cnn_model, activation, q)
+```
+
+```{r}
+df.plot = data.frame(PR.prediction=as.vector(t(out$PR.prediction.feature)),
+                     NN.prediction=as.vector(t(out$NN.prediction.feature))
+                     )
+```
+
+```{r}
+ggplot(df.plot, aes(x=NN.prediction, y=PR.prediction)) +
+  geom_point() + 
+  geom_abline(slope=1, intercept=0, color="red") + 
+  labs(x = "Predicted with 1D-CNN") + 
+  labs(y = "Predicted with PR") +
+  ggtitle("Feature maps - PR vs 1D-CNN") + 
+  theme_cowplot(12) +
+  theme(plot.title = element_text(hjust = 0.5,size=10)) +
+  theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+```{r}
+df.Y = data.frame(NN.Y = out$NN.prediction.Y, PR.Y=out$PR.prediction.Y, true.Y=split$test$Y)
+```
+
+```{r}
+plot2 = ggplot(df.Y, aes(x=NN.Y, y=PR.Y)) +
+          geom_point() + 
+          geom_abline(slope=1, intercept=0, color="red") + 
+          labs(x = "Z predicted with 1D-CNN") + 
+          labs(y = "Z predicted with PR") +
+          ggtitle("Target - PR vs 1D-CNN") + 
+          theme_cowplot(12) +
+          theme(plot.title = element_text(hjust = 0.5,size=10)) +
+          theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+```{r}
+plot1 = ggplot(df.Y, aes(x=NN.Y, y=true.Y)) +
+        geom_point() + 
+        geom_abline(slope=1, intercept=0, color="red") + 
+        labs(x = "Z predicted with 1D-CNN") + 
+        labs(y = "True Z") +
+        ggtitle("True Z vs 1D-CNN") + 
+        theme_cowplot(12) +
+        theme(plot.title = element_text(hjust = 0.5,size=10)) +
+        theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+
+```{r}
+plot.1D = plot_grid(plot1, plot2, labels=c("a)", "b)"))
+plot.1D
+```
+
+
+
+## 2D Convolution with kernel size k=1
+
+```{r}
+# for reproducibility purposes
+set.seed(1234)
+```
+
+
+```{r}
+# Fix data parameters
+sample_size = 200
+signal_size = 10
+range = 5
+# Fix CNN and PR parameters
+k = 1
+q = 3
+activation = 'tanh'
+```
+
+```{r}
+data = generate_data("2D", sample_size, signal_size, k, c(-range,range))
+split = scale_and_split("2D", data, split_prop=0.8)
+```
+
+
+```{r}
+input_shape = c(signal_size, signal_size, 1)
+
+cnn_model <- keras_model_sequential() %>%
+  layer_conv_2d(filters=1, kernel_size=k, activation=activation, input_shape=input_shape) %>%
+  layer_flatten() %>%
+  layer_dense(units=1, activation = "linear")
+
+cnn_model %>% compile(
+  loss="mean_squared_error",
+  optimizer=optimizer_adam()
+)
+```
+
+
+
+```{r}
+cnn_history = cnn_model %>% fit(
+  split$train$X, split$train$Y,
+  view_metrics=F, verbose=0,
+  epochs=800
+)
+```
+
+
+```{r}
+out = pr_from_cnn_2d(split$train, split$test, cnn_model, activation, 2)
+```
+
+
+```{r}
+df.plot = data.frame(PR.prediction=as.vector(out$PR.prediction.feature),
+                     NN.prediction=as.vector(out$NN.prediction.feature)
+                     )
+```
+
+```{r}
+ggplot(df.plot, aes(x=NN.prediction, y=PR.prediction)) +
+  geom_point() + 
+  geom_abline(slope=1, intercept=0, color="red") + 
+  labs(x = "Predicted with 2D-CNN (k=1)") + 
+  labs(y = "Predicted with PR") +
+  ggtitle("Feature maps - PR vs 2D-CNN (k=1)") + 
+  theme_cowplot(12) +
+  theme(plot.title = element_text(hjust = 0.5,size=10)) +
+  theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+
+
+```{r}
+df.Y = data.frame(NN.Y = out$NN.prediction.Y, PR.Y=out$PR.prediction.Y, true.Y=split$test$Y)
+```
+
+```{r}
+plot4 = ggplot(df.Y, aes(x=NN.Y, y=PR.Y)) +
+          geom_point() + 
+          geom_abline(slope=1, intercept=0, color="red") + 
+          labs(x = "Z predicted with 2D-CNN") + 
+          labs(y = "Z predicted with PR") +
+          ggtitle("Target - PR vs 2D-CNN (k=1)") + 
+          theme_cowplot(12) +
+          theme(plot.title = element_text(hjust = 0.5,size=10)) +
+          theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+```{r}
+
+plot3 = ggplot(df.Y, aes(x=NN.Y, y=true.Y)) +
+        geom_point() + 
+        geom_abline(slope=1, intercept=0, color="red") + 
+        labs(x = "Z predicted with 2D-CNN") + 
+        labs(y = "True Z") +
+        ggtitle("True Z vs 2D-CNN (k=1)") + 
+        theme_cowplot(12) +
+        theme(plot.title = element_text(hjust = 0.5,size=10)) +
+        theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+
+```
+
+
+```{r}
+plot.2D.1 = plot_grid(plot3, plot4, labels=c("a)", "b)"))
+plot.2D.1
+```
+
+
+
+
+## 2D Convolution with kernel size k=2
+
+```{r}
+# for reproducibility purposes
+set.seed(1234)
+```
+
+
+```{r}
+# Fix data parameters
+sample_size = 200
+signal_size = 10
+range = 5
+# Fix CNN and PR parameters
+k = 2
+q = 2
+activation='tanh'
+```
+
+```{r}
+data = generate_data("2D", sample_size, signal_size, k, c(-range,range))
+split = scale_and_split("2D", data, split_prop=0.8)
+```
+
+```{r}
+input_shape = c(signal_size, signal_size, 1)
+
+cnn_model <- keras_model_sequential() %>%
+  layer_conv_2d(filters=1, kernel_size=k, activation=activation, input_shape=input_shape) %>%
+  layer_flatten() %>%
+  layer_dense(units=1, activation = "linear")
+
+cnn_model %>% compile(
+  loss="mean_squared_error",
+  optimizer=optimizer_adam()
+)
+```
+
+
+
+```{r}
+cnn_history = cnn_model %>% fit(
+  split$train$X, split$train$Y,
+  view_metrics=F, verbose=0,
+  epochs=800
+)
+```
+
+
+```{r}
+out = pr_from_cnn_2d(split$train, split$test, cnn_model, activation, q)
+```
+
+```{r}
+df.plot = data.frame(PR.prediction=as.vector(out$PR.prediction.feature),
+                     NN.prediction=as.vector(out$NN.prediction.feature)
+                     )
+```
+
+```{r}
+ggplot(df.plot, aes(x=NN.prediction, y=PR.prediction)) +
+  geom_point() + 
+  geom_abline(slope=1, intercept=0, color="red") + 
+  labs(x = "Predicted with CNN") + 
+  labs(y = "Predicted with PR") +
+  ggtitle("Feature maps - PR vs 2D-CNN (k=2)") + 
+  theme_cowplot(12) +
+  theme(plot.title = element_text(hjust = 0.5,size=10)) +
+  theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+
+
+
+
+
+
+```{r}
+df.Y = data.frame(NN.Y = out$NN.prediction.Y, PR.Y=out$PR.prediction.Y, true.Y=split$test$Y)
+```
+
+```{r}
+plot6 = ggplot(df.Y, aes(x=NN.Y, y=PR.Y)) +
+          geom_point() + 
+          geom_abline(slope=1, intercept=0, color="red") + 
+          labs(x = "Z predicted with 2D-CNN (k=2)") + 
+          labs(y = "Z predicted with PR") +
+          ggtitle("Target - PR vs 2D-CNN (k=2)") + 
+          theme_cowplot(12) +
+          theme(plot.title = element_text(hjust = 0.5,size=10)) +
+          theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+```
+
+
+```{r}
+
+plot5 = ggplot(df.Y, aes(x=NN.Y, y=true.Y)) +
+          geom_point() + 
+          geom_abline(slope=1, intercept=0, color="red") + 
+          labs(x = "Z predicted with 2D-CNN (k=2)") + 
+          labs(y = "True Z") +
+          ggtitle("True Z vs 2D-CNN (k=2)") + 
+          theme_cowplot(12) +
+          theme(plot.title = element_text(hjust = 0.5,size=10)) +
+          theme(axis.text=element_text(size=8), axis.title=element_text(size=8))
+
+```
+
+```{r}
+plot.2D.2 = plot_grid(plot5, plot6, labels=c("a)", "b)"))
+plot.2D.2
+```
+

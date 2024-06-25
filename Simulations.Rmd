@@ -1,0 +1,154 @@
+---
+title: "Simulations"
+author: "Alejandro Macías"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+libraries = c("gtools","keras","ggplot2", "calculus", "cowplot", "tidyverse")
+for (i in libraries) {
+  if(!require(i,character.only = TRUE)) {
+    install.packages(i)
+    library(i,character.only = TRUE)
+  }
+}
+```
+
+
+
+```{r}
+for (f in list.files("./functions/", pattern = "*.R")){
+  source(paste0("functions/", f))
+}
+```
+
+## 1D Convolution
+
+```{r}
+set.seed(1234)
+```
+
+```{r}
+sample_size = 200
+signal_size = 10
+range = 5
+```
+
+```{r}
+case = '1D'
+epochs = 800
+ks = c(2,3,4,5)
+qs = c(2,3,4,5,6,7)
+
+n_simulations = 100
+```
+
+
+```{r}
+for (kernel_size in ks){
+  mse = array(dim=c(n_simulations,signal_size-kernel_size+1))
+  for (q_taylor in qs){
+    if (q_taylor %% 2 == 1){
+      activation = 'tanh'
+    }
+    else{
+      activation = 'softplus'
+    }
+    for (i in 1:n_simulations){
+      out = simulate(sample_size, signal_size, range, 
+                     case, kernel_size, epochs,
+                     activation, q_taylor)
+      mse[i,] = out$MSE.NN.vs.PR.feature
+    }
+    saveRDS(mse, paste0(case, "_k=", kernel_size,"_q=",q_taylor,"_",activation))
+  }
+}
+
+```
+
+## 2D Convolution
+
+### k=1
+
+```{r}
+set.seed(1234)
+```
+
+```{r}
+sample_size = 200
+signal_size = 10
+range = 5
+```
+
+```{r}
+case = '2D'
+kernel_size = 1
+epochs = 800
+qs = c(2,3,4,5,6,7)
+```
+
+```{r}
+n_simulations = 100
+mse = array(dim=c(n_simulations,signal_size-kernel_size+1,signal_size-kernel_size+1))
+for (q_taylor in qs){
+  if (q_taylor %% 2 == 1){
+    activation = 'tanh'
+  }
+  else{
+    activation = 'softplus'
+    }
+  for (i in 1:n_simulations){
+    out = simulate(sample_size, signal_size, range, 
+                   case, kernel_size, epochs,
+                   activation, q_taylor)
+    mse[i,,] = out$MSE.NN.vs.PR.feature
+  }
+  saveRDS(mse, paste0(case, "_k=", kernel_size,"_q=",q_taylor,"_", activation))
+}
+```
+
+
+### k=2
+
+```{r}
+set.seed(1234)
+```
+
+```{r}
+sample_size = 200
+signal_size = 10
+range = 5
+```
+
+```{r}
+case = '2D'
+kernel_size = 2
+q_taylor = 2
+epochs = 10
+activations = c('softplus', 'tanh')
+```
+
+
+```{r}
+n_simulations = 100
+mse = array(dim=c(n_simulations,signal_size-kernel_size+1,signal_size-kernel_size+1))
+for (fun in activations){
+  for (i in 1:n_simulations){
+    out = simulate(sample_size, signal_size, range, 
+                   case, kernel_size, epochs,
+                   fun, q_taylor)
+    mse[i,,] = out$MSE.NN.vs.PR.feature
+  }
+  saveRDS(mse, paste0(case, "_k=", kernel_size,"_q=",q_taylor,"_", fun))
+}
+```
+
+
+
+

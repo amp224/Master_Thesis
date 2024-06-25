@@ -1,0 +1,314 @@
+---
+title: "Simulation boxplots"
+author: "Alejandro Macías"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+libraries = c("gtools","keras","ggplot2", "calculus", "cowplot", "tidyverse")
+for (i in libraries) {
+  if(!require(i,character.only = TRUE)) {
+    install.packages(i)
+    library(i,character.only = TRUE)
+  }
+}
+```
+
+
+# 1D Convolution
+
+```{r}
+sim.1D = readRDS("saved_mses/1D_k=2_q=2_softplus")
+df = data.frame(sim.1D)
+```
+
+
+```{r}
+# Reshape the data from wide to long format
+df_long <- df %>%
+  pivot_longer(cols = everything(), names_to = "variable", values_to = "value")
+
+for (i in 1:9){
+  df_long$variable[df_long$variable == paste0("X",i)] = paste0("Y",i)
+}
+```
+
+```{r}
+# Create the boxplot
+ggplot(df_long, aes(x = variable, y = value, fill="red")) +
+  geom_boxplot() + scale_y_log10() +
+  ylab("MSE") + xlab("Element of the feature map") +
+  theme(axis.text.x = element_text(angle = 0, hjust = 1), legend.position = "none") 
+```
+
+
+```{r}
+case = '1D'
+ks = c(2,3,4,5)
+qs = c(2,3,4,5,6,7)
+```
+
+
+```{r}
+df.plot.1D = data.frame(matrix(ncol=4))
+names(df.plot.1D) = c('MSE', 'Kernel.Size', 'q.Taylor', 'Act.Function')
+
+
+for (kernel_size in ks){
+  for (q_taylor in qs){
+    
+    if (q_taylor%%2 == 1){
+      fun = 'tanh'
+    }
+    else{
+      fun = 'softplus'
+    }
+    
+    mses = as.vector(readRDS(paste0("./saved_mses/", case, "_k=", kernel_size, "_q=", q_taylor, "_", fun)))
+
+    df.temp = data.frame(matrix(nrow=length(mses), ncol=4))
+    names(df.temp) = c('MSE', 'Kernel.Size', 'q.Taylor', 'Act.Function')
+    
+    df.temp$MSE = mses
+    df.temp$Kernel.Size = kernel_size
+    df.temp$q.Taylor = q_taylor
+    df.temp$Act.Function = fun
+    
+    df.plot.1D = rbind(df.plot.1D, df.temp)
+  }
+}
+
+df.plot.1D = na.omit(df.plot.1D)
+
+df.plot.1D$q.Taylor[df.plot.1D$q.Taylor==2] = 3
+df.plot.1D$q.Taylor[df.plot.1D$q.Taylor==4] = 5
+df.plot.1D$q.Taylor[df.plot.1D$q.Taylor==6] = 7
+
+df.plot.1D$Kernel.Size = as.factor(df.plot.1D$Kernel.Size)
+df.plot.1D$q.Taylor = as.factor(df.plot.1D$q.Taylor)
+df.plot.1D$Act.Function = as.factor(df.plot.1D$Act.Function)
+
+```
+
+```{r, warning=F}
+ggplot(df.plot.1D, aes(x=Kernel.Size, y=MSE, fill=q.Taylor)) +
+  geom_boxplot() +
+  labs(fill = "Taylor \n order") +
+  xlab(" Kernel size (k)") +
+  theme_cowplot(12) +
+  facet_grid(Act.Function ~ .) + scale_y_log10() +
+  theme(panel.grid.major.y = element_line( size=.05, color="grey", linetype = "dashed" ))
+```
+
+# 2D Convolution
+
+## k=1
+
+```{r}
+sim.2D.1 = readRDS("saved_mses/2D_k=1_q=2_softplus")
+```
+
+```{r}
+mean.sim.2D.1 = apply(sim.2D.1, c(2,3), mean)
+
+mean.sim.2D.1 = data.frame(mean.sim.2D.1)
+
+## the matrix needs names
+names(mean.sim.2D.1) <- paste0(1:10)
+
+## convert to tibble, add row identifier, and shape "long"
+mean.sim.2D.1 <-
+  mean.sim.2D.1 %>%
+  as_tibble() %>%
+  rownames_to_column("Row") %>%
+  pivot_longer(-Row, names_to = "Column", values_to = "MSE") %>%
+  mutate(
+    Var1 = factor(Row, levels = 1:10),
+    Var2 = factor(gsub("V", "", Column), levels = 1:10)
+  )
+#> Warning: The `x` argument of `as_tibble.matrix()` must have unique column names if
+#> `.name_repair` is omitted as of tibble 2.0.0.
+#> ℹ Using compatibility `.name_repair`.
+
+ggplot(mean.sim.2D.1, aes(Column, Row)) +
+  geom_tile(aes(fill = MSE)) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_x_discrete(limits=as.character(1:10)) +
+  scale_y_discrete(limits=as.character(1:10))
+
+```
+
+
+```{r}
+df.2D = data.frame(matrix(NA, nrow=prod(dim(sim.2D.1)), ncol=3))
+names(df.2D) = c("MSE", "i", "j")
+
+ind = 0
+
+for (image in 1:dim(sim.2D)[1]){
+  for (i in 1:dim(sim.2D)[2]){
+    for (j in 1:dim(sim.2D)[3]){
+      
+      ind = ind + 1
+      df.2D[ind,] = c(sim.2D[image,i,j],i,j)
+      
+    }
+  }
+}
+
+df.2D$i = as.factor(df.2D$i)
+df.2D$j = as.factor(df.2D$j)
+
+ggplot(df.2D, aes(x=i, y=MSE)) +
+  geom_boxplot() +
+  scale_y_log10() +
+  facet_grid(j ~ .)
+```
+
+
+```{r}
+case = '2D'
+qs = c(2,3,4,5,6,7)
+kernel_size = 1
+```
+
+```{r}
+df.plot.2D.1 = data.frame(matrix(ncol=3))
+names(df.plot.2D.1) = c("MSE", "q.Taylor", "Act.Function")
+
+
+
+for (q_taylor in qs){
+  
+  if (q_taylor%%2 == 1){
+    fun = 'tanh'
+  }
+  else{
+    fun = 'softplus'
+  }
+  
+  
+  
+  mses = as.vector(readRDS(paste0("saved_mses/", case, "_k=", kernel_size, "_q=", q_taylor, "_", fun)))
+  
+  df.temp = data.frame(matrix(nrow=length(mses), ncol=3))
+  names(df.temp) = names(df.plot.2D.1) = c("MSE", "q.Taylor", "Act.Function")
+  
+  
+  df.temp$MSE = mses
+  df.temp$q.Taylor = q_taylor
+  df.temp$Act.Function = fun
+  
+  df.plot.2D.1 = rbind(df.plot.2D.1, df.temp) 
+
+}
+
+
+df.plot.2D.1 = na.omit(df.plot.2D.1)
+
+df.plot.2D.1$q.Taylor[df.plot.2D.1$q.Taylor==2] = 3
+df.plot.2D.1$q.Taylor[df.plot.2D.1$q.Taylor==4] = 5
+df.plot.2D.1$q.Taylor[df.plot.2D.1$q.Taylor==6] = 7
+
+df.plot.2D.1$q.Taylor = as.factor(df.plot.2D.1$q.Taylor)
+df.plot.2D.1$Act.Function = as.factor(df.plot.2D.1$Act.Function)
+```
+
+```{r}
+ggplot(df.plot.2D.1, aes(x=q.Taylor, y=MSE, fill=Act.Function)) +
+  geom_boxplot() +
+  xlab("Taylor expansion order (q)") +
+  theme_cowplot(12) +
+  facet_grid(Act.Function ~ .) + scale_y_log10() +
+  theme(panel.grid.major.y = element_line( size=.05, color="grey", linetype = "dashed" ), legend.position = "none")
+```
+
+
+## k=2
+
+```{r}
+sim.2D.2 = readRDS("saved_mses/2D_k=2_q=2_softplus")
+```
+
+```{r}
+mean.sim.2D.2 = apply(sim.2D.2, c(2,3), mean)
+
+mean.sim.2D.2 = data.frame(mean.sim.2D.2)
+
+## the matrix needs names
+names(mean.sim.2D.2) <- paste0(1:9)
+
+## convert to tibble, add row identifier, and shape "long"
+mean.sim.2D.2 <-
+  mean.sim.2D.2 %>%
+  as_tibble() %>%
+  rownames_to_column("Row") %>%
+  pivot_longer(-Row, names_to = "Column", values_to = "MSE") %>%
+  mutate(
+    Var1 = factor(Row, levels = 1:9),
+    Var2 = factor(gsub("V", "", Column), levels = 1:9)
+  )
+#> Warning: The `x` argument of `as_tibble.matrix()` must have unique column names if
+#> `.name_repair` is omitted as of tibble 2.0.0.
+#> ℹ Using compatibility `.name_repair`.
+
+ggplot(mean.sim.2D.2, aes(Column, Row)) +
+  geom_tile(aes(fill = MSE)) +
+  scale_fill_gradient(low = "yellow", high = "red") +
+  scale_x_discrete(limits=as.character(1:9)) +
+  scale_y_discrete(limits=as.character(1:9))
+
+```
+
+
+
+```{r}
+case = '2D'
+q_taylor = 2
+kernel_size = 2
+
+activations = c('tanh', 'softplus')
+```
+
+```{r}
+df.plot.2D.2 = data.frame(matrix(ncol=2))
+names(df.plot.2D.2) = c("MSE", "Act.Function")
+
+
+for (fun in activations){
+  
+  mses = as.vector(readRDS(paste0("saved_mses/", case, "_k=", kernel_size, "_q=", q_taylor, "_", fun)))
+  
+  df.temp = data.frame(matrix(nrow=length(mses), ncol=2))
+  names(df.temp) = names(df.plot.2D.2) = c("MSE", "Act.Function")
+  
+  
+  df.temp$MSE = mses
+  df.temp$Act.Function = fun
+  
+  df.plot.2D.2 = rbind(df.plot.2D.2, df.temp) 
+
+}
+
+
+df.plot.2D.2 = na.omit(df.plot.2D.2)
+
+
+df.plot.2D.2$Act.Function = as.factor(df.plot.2D.2$Act.Function)
+```
+
+```{r}
+ggplot(df.plot.2D.2, aes(x=Act.Function, y=MSE, fill=Act.Function)) +
+  geom_boxplot() +
+  xlab("Activation function") +
+  theme_cowplot(12) +
+  scale_y_log10() +
+  theme(panel.grid.major.y = element_line( size=.05, color="grey", linetype = "dashed" ),
+        legend.position = "none")
+```
+
